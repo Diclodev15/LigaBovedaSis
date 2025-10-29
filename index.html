@@ -1,277 +1,119 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🏀 Liga Automática de Baloncesto</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liga de Baloncesto Automática</title>
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background-color: #0e0e0e;
-  color: #f1f1f1;
-  margin: 0;
-  padding: 20px;
-}
-h1, h2 {
-  text-align: center;
-  color: #ffb100;
-}
-textarea {
-  width: 100%;
-  height: 200px;
-  background: #1c1c1c;
-  color: #f1f1f1;
-  border: 1px solid #555;
-  border-radius: 5px;
-  padding: 10px;
-  resize: vertical;
-}
-button {
-  background: #ffb100;
-  border: none;
-  color: #000;
-  padding: 10px 20px;
-  margin: 5px;
-  font-weight: bold;
-  cursor: pointer;
-  border-radius: 4px;
-}
-button:hover {
-  background: #ffd54f;
-}
-.container {
-  max-width: 1000px;
-  margin: auto;
-}
-.section {
-  background: #1c1c1c;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 0 10px #000;
-}
-.list, .team {
-  background: #222;
-  padding: 10px;
-  margin-top: 8px;
-  border-radius: 5px;
-  border: 1px solid #333;
-}
-.team-title {
-  font-weight: bold;
-  color: #ffb100;
-}
-.status {
-  background: #111;
-  padding: 10px;
-  border-radius: 5px;
-  border: 1px solid #333;
-}
+body{margin:0;font-family:system-ui;background:#0e1320;color:#fff;}
+header{background:#141a33;padding:10px 20px;position:sticky;top:0;z-index:5}
+main{display:grid;gap:12px;padding:20px;grid-template-columns:1fr 1fr;}
+@media(max-width:900px){main{grid-template-columns:1fr;}}
+.card{background:#1c2444;border-radius:10px;padding:15px;border:1px solid #2a335a;}
+button{cursor:pointer;border-radius:6px;padding:8px 12px;border:1px solid #2a335a;font-weight:600;}
+button.primary{background:#4da3ff;color:#021023;}
+button.ok{background:#2ecc71;color:#021015;}
+button.bad{background:#ff5c5c;color:#230000;}
+textarea{width:100%;height:130px;background:#0f152b;color:#fff;border:1px solid #2a335a;border-radius:8px;padding:8px;}
+.pill{display:inline-block;background:#232b55;border:1px solid #2a335a;border-radius:999px;padding:4px 10px;margin:2px;font-size:13px;}
+.team{background:#212845;padding:10px;border-radius:8px;margin-bottom:10px;}
+.chip{display:inline-block;background:#28335e;padding:5px 8px;border-radius:8px;margin:2px;}
 </style>
 </head>
 <body>
-
-<h1>🏀 Sistema Automático - Liga de Baloncesto</h1>
-
-<div class="container">
-
-  <div class="section">
-    <h2>1️⃣ Ingresar Lista de Jugadores</h2>
-    <p>Marca con <b>(invitado)</b> a los invitados.</p>
-    <textarea id="inputList" placeholder="Ejemplo:&#10;1. Lápiz Conciente&#10;2. Future (invitado)"></textarea><br>
-    <button onclick="loadPlayers()">Cargar Listas</button>
-    <div id="lists"></div>
-  </div>
-
-  <div class="section">
-    <h2>2️⃣ Simulación de Partidos</h2>
-    <button onclick="nextMatch()">➜ Armar próximo partido</button>
-    <button onclick="selectWinner('A')">🏆 Gana Equipo A</button>
-    <button onclick="selectWinner('B')">🏆 Gana Equipo B</button>
-    <div id="match"></div>
-  </div>
-
-  <div class="section status" id="status">Estado del sistema...</div>
-
-</div>
+<header><h2>🏀 Sistema Automático de Liga</h2></header>
+<main>
+<section class="card">
+<h3>Cargar jugadores</h3>
+<textarea id="seed" placeholder="Ejemplo:
+1. Max Diclo
+2. Juan (invitado)
+3. Pedro"></textarea>
+<button class="primary" id="load">Cargar</button>
+<hr>
+<h4>Liga</h4><div id="liga" class="queue"></div>
+<h4>Invitados</h4><div id="invitados" class="queue"></div>
+</section>
+<section class="card">
+<h3>Partido</h3>
+<div id="estado"></div>
+<div class="team"><h4>Equipo A</h4><div id="A"></div></div>
+<div class="team"><h4>Equipo B</h4><div id="B"></div></div>
+<button class="ok" id="ganaA">Gana Equipo A</button>
+<button class="bad" id="ganaB">Gana Equipo B</button>
+<button class="primary" id="siguiente">➡️ Siguiente Partido</button>
+</section>
+</main>
 
 <script>
-let league = [];
-let guests = [];
-let championTeam = [];
-let standbyChampion = null;
-let standbyMode = false;
-let standbyCount = 0;
-let matchNumber = 0;
-
-let currentTeams = {A:[], B:[], desc:""};
-
-function loadPlayers(){
-  const text = document.getElementById("inputList").value.trim();
-  const lines = text.split(/\n/).map(l=>l.replace(/^\d+\.\s*/,'').trim()).filter(Boolean);
-  league = [];
-  guests = [];
-  for (let name of lines){
-    if (name.toLowerCase().includes("(invitado)")) {
-      guests.push(name.replace(/\(invitado\)/i,"").trim());
-    } else league.push(name);
-  }
-  championTeam = [];
-  standbyChampion = null;
-  standbyMode = false;
-  standbyCount = 0;
-  matchNumber = 0;
-  updateLists();
-  showStatus("✅ Listas cargadas correctamente.");
+let liga=[],invitados=[],campeon=[],racha=0,standby=[],A=[],B=[],ultimoEnCancha=new Set(),modo='idle',nPartido=0;
+function $(x){return document.querySelector(x);}
+function render(){
+ $("#liga").innerHTML=liga.map(n=>`<span class='pill'>${n}</span>`).join('');
+ $("#invitados").innerHTML=invitados.map(n=>`<span class='pill'>${n}</span>`).join('');
+ $("#A").innerHTML=A.map(n=>`<span class='pill'>${n}</span>`).join('');
+ $("#B").innerHTML=B.map(n=>`<span class='pill'>${n}</span>`).join('');
+ $("#estado").innerHTML=`<div class='chip'>Partido: ${nPartido}</div> 
+ <div class='chip'>Racha: ${racha}</div> 
+ <div class='chip'>Modo: ${modo}</div> 
+ <div class='chip'>Campeón: ${campeon.join(', ')||'—'}</div> 
+ <div class='chip'>Standby: ${standby.join(', ')||'—'}</div>`;
 }
-
-function updateLists(){
-  document.getElementById("lists").innerHTML = `
-  <div class='list'><b>🏀 Liga:</b> ${league.join(", ")}</div>
-  <div class='list'><b>🌐 Invitados:</b> ${guests.join(", ")}</div>
-  `;
+function parseLista(txt){
+ const l=txt.split('\n').map(s=>s.replace(/^\d+\W*/,'').trim()).filter(Boolean);
+ const L=[],I=[];
+ for(const n of l){/\(invitado\)/i.test(n)?I.push(n.replace(/\(invitado\)/i,'').trim()):L.push(n);}
+ return {L,I};
 }
-
-function getNextFrom(arr, n){
-  const out = [];
-  for (let i=0;i<n;i++){
-    if (arr.length===0) break;
-    out.push(arr.shift());
-  }
-  return out;
+function tomar(q,n,ex=new Set()){const o=[];let c=0;while(o.length<n&&q.length&&c<q.length*3){const v=q.shift();if(!ex.has(v))o.push(v);q.push(v);c++;}return o;}
+function partida1(){
+ const p=liga.splice(0,10);
+ const mezclado=p.sort(()=>Math.random()-0.5);
+ A=mezclado.slice(0,5);B=mezclado.slice(5);
+ modo='normal';nPartido=1;
+ ultimoEnCancha=new Set([...A,...B]);
 }
-
-function getNextPlayers(n){
-  const out=[];
-  while(out.length<n){
-    if (league.length>0) out.push(league.shift());
-    else if (guests.length>0) out.push(guests.shift());
-    else break;
-  }
-  return out;
+function retador(){let L=tomar(liga,3),G=tomar(invitados,2);if(G.length<2)G=G.concat(tomar(liga,2-G.length));return L.concat(G);}
+function partidoNormal(){
+ A=campeon.slice();B=retador();modo='normal';nPartido++;ultimoEnCancha=new Set([...A,...B]);
 }
-
-function nextMatch(){
-  let teamA=[], teamB=[], desc="";
-
-  // STANDBY MODE → dos equipos nuevos se enfrentan
-  if (standbyMode && !standbyChampion){
-    const nuevos10 = getNextPlayers(10);
-    teamA = nuevos10.slice(0,5);
-    teamB = nuevos10.slice(5,10);
-    desc = "⚔️ Duelo entre nuevos equipos (Campeón en standby)";
-    showMatch(teamA,teamB,desc);
-    return;
-  }
-
-  // Duelo del campeón en standby vs ganador del duelo interno
-  if (standbyChampion && championTeam.length>0){
-    teamA = standbyChampion;
-    teamB = championTeam;
-    desc = "🏆 Duelo: Campeón en standby vs Retador";
-    showMatch(teamA,teamB,desc);
-    return;
-  }
-
-  if (matchNumber===0){
-    // primer partido con 10 primeros de la liga
-    const first10 = league.splice(0,10);
-    teamA = first10.slice(0,5);
-    teamB = first10.slice(5,10);
-    desc = "Partido 1 (Inicio de liga)";
-  } else {
-    // partidos normales
-    if (championTeam.length>0){
-      teamA = championTeam;
-      let liga3 = getNextFrom(league,3);
-      let inv2 = getNextFrom(guests,2);
-      teamB = liga3.concat(inv2);
-      desc = `Partido ${matchNumber+1}`;
-    }
-  }
-
-  currentTeams = {A:teamA,B:teamB,desc};
-  showMatch(teamA,teamB,desc);
-  matchNumber++;
+function partido10nuevos(){
+ const ex=new Set(ultimoEnCancha);
+ let aL=tomar(liga,3,ex),aG=tomar(invitados,2,ex);
+ if(aG.length<2)aL=aL.concat(tomar(liga,2-aG.length,ex));
+ let bL=tomar(liga,3,ex),bG=tomar(invitados,2,ex);
+ if(bG.length<2)bL=bL.concat(tomar(liga,2-bG.length,ex));
+ A=aL.concat(aG);B=bL.concat(bG);modo='standby';nPartido++;ultimoEnCancha=new Set([...A,...B]);
 }
-
-function showMatch(teamA,teamB,desc){
-  document.getElementById("match").innerHTML = `
-    <h3>${desc}</h3>
-    <div class='team'><span class='team-title'>Equipo A:</span> ${teamA.join(", ")}</div>
-    <div class='team'><span class='team-title'>Equipo B:</span> ${teamB.join(", ")}</div>
-  `;
+function siguiente(){
+ if(nPartido===0)return partida1();
+ if(standby.length&&modo!=='standby'&&campeon.length){A=campeon.slice();B=standby.slice();standby=[];modo='normal';nPartido++;return render();}
+ if(campeon.length===5&&racha>=2){standby=campeon.slice();campeon=[];racha=0;partido10nuevos();return;}
+ if(modo==='standby'){partidoNormal();return;}
+ if(campeon.length===5){partidoNormal();return;}
 }
-
-function selectWinner(side){
-  const winner = currentTeams[side];
-  const loser = side==='A' ? currentTeams['B'] : currentTeams['A'];
-
-  // Caso 1: duelo interno durante modo standby
-  if (standbyMode && !standbyChampion){
-    championTeam = winner;
-    showStatus(`🏀 ${side==='A'?'Equipo A':'Equipo B'} gana el duelo interno y será el retador del campeón en standby.`);
-    return;
-  }
-
-  // Caso 2: duelo entre campeón standby y nuevo campeón interno
-  if (standbyChampion){
-    if (side==='A'){
-      championTeam = standbyChampion;
-      showStatus("🏆 El campeón en standby regresa invicto como campeón activo.");
-    } else {
-      championTeam = winner;
-      showStatus("💥 El campeón en standby fue derrotado. Nuevo campeón activo.");
-    }
-    standbyChampion = null;
-    standbyMode = false;
-    standbyCount = 0;
-    updateLists();
-    return;
-  }
-
-  // Caso 3: flujo normal
-  if (championTeam.length===0){
-    championTeam = winner;
-    standbyCount = 1;
-  } else if (arraysEqual(winner,championTeam)){
-    standbyCount++;
-  } else {
-    championTeam = winner;
-    standbyCount = 1;
-  }
-
-  moverPerdedores(loser);
-
-  if (standbyCount>=2){
-    standbyChampion = championTeam;
-    championTeam = [];
-    standbyMode = true;
-    showStatus("🔥 Campeón gana 2 veces consecutivas → entra en standby. Se formarán 10 nuevos jugadores para enfrentarse entre sí.");
-  } else {
-    showStatus(`🏀 Gana ${side==='A'?'Equipo A':'Equipo B'} → Campeón actual: ${winner.join(", ")}`);
-  }
-
-  updateLists();
+function gana(quien){
+ if(modo==='idle')return;
+ const AA=A.slice(),BB=B.slice();
+ if(modo==='standby'){
+   const win=(quien==='A'?AA:BB),lose=(quien==='A'?BB:AA);
+   campeon=win.slice();racha=1;modo='normal';
+   for(const n of lose){if(invitados.includes(n))invitados.push(invitados.splice(invitados.indexOf(n),1)[0]);else liga.push(liga.splice(liga.indexOf(n),1)[0]);}
+ }else{
+   if(!campeon.length){campeon=(quien==='A'?AA:BB);racha=1;}
+   else{
+     const ganaCampeon=(quien==='A');
+     if(ganaCampeon){racha++;if(racha>=2){standby=campeon.slice();campeon=[];racha=0;partido10nuevos();render();return;}}
+     else{racha=1;campeon=(quien==='A'?AA:BB);}
+   }
+ }
+ modo='idle';render();
 }
-
-function moverPerdedores(loser){
-  for (let p of loser){
-    if (guests.includes(p)||league.includes(p)) continue;
-    if (p.toLowerCase().includes("(invitado)") || /future|drake|kendrick|lil/i.test(p))
-      guests.push(p);
-    else league.push(p);
-  }
-}
-
-function arraysEqual(a,b){
-  return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,i)=>v===b[i]);
-}
-
-function showStatus(msg){
-  document.getElementById("status").innerHTML = msg;
-}
+$("#load").onclick=()=>{const {L,I}=parseLista($("#seed").value);liga=L;invitados=I;campeon=[];racha=0;standby=[];modo='idle';nPartido=0;render();}
+$("#siguiente").onclick=()=>{siguiente();render();}
+$("#ganaA").onclick=()=>{gana('A');}
+$("#ganaB").onclick=()=>{gana('B');}
+render();
 </script>
-
 </body>
 </html>
