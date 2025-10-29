@@ -5,225 +5,186 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Liga de Baloncesto Persistente</title>
 <style>
-body{margin:0;font-family:system-ui;background:#0e1320;color:#fff;}
-header{background:#141a33;padding:10px 20px;position:sticky;top:0;z-index:5}
-main{display:grid;gap:12px;padding:20px;grid-template-columns:1fr 1fr;}
-@media(max-width:900px){main{grid-template-columns:1fr;}}
-.card{background:#1c2444;border-radius:10px;padding:15px;border:1px solid #2a335a;}
-button{cursor:pointer;border-radius:6px;padding:8px 12px;border:1px solid #2a335a;font-weight:600;}
-button.primary{background:#4da3ff;color:#021023;}
-button.ok{background:#2ecc71;color:#021015;}
-button.bad{background:#ff5c5c;color:#230000;}
-textarea{width:100%;height:130px;background:#0f152b;color:#fff;border:1px solid #2a335a;border-radius:8px;padding:8px;}
-.pill{display:inline-block;background:#232b55;border:1px solid #2a335a;border-radius:999px;padding:4px 10px;margin:2px;font-size:13px;}
-.team{background:#212845;padding:10px;border-radius:8px;margin-bottom:10px;}
-.chip{display:inline-block;background:#28335e;padding:5px 8px;border-radius:8px;margin:2px;}
+body { font-family: Arial, sans-serif; padding: 20px; }
+textarea { width: 100%; height: 100px; margin-bottom: 10px; }
+button { margin: 5px; padding: 10px; }
+h2 { margin-top: 20px; }
+ul { list-style: none; padding: 0; }
+li { margin: 3px 0; }
+.equipo { display: inline-block; width: 45%; vertical-align: top; }
 </style>
 </head>
 <body>
-<header><h2>🏀 Liga de Baloncesto Persistente</h2></header>
-<main>
-<section class="card">
-<h3>Cargar jugadores</h3>
-<textarea id="seed" placeholder="Ejemplo:
-1. Max Diclo
-2. Juan (invitado)
-3. Pedro"></textarea>
-<button class="primary" id="load">Cargar</button>
-<hr>
-<h4>Liga</h4><div id="liga" class="queue"></div>
-<h4>Invitados</h4><div id="invitados" class="queue"></div>
-</section>
-<section class="card">
-<h3>Partido</h3>
-<div id="estado"></div>
-<div class="team"><h4>Equipo A</h4><div id="A"></div></div>
-<div class="team"><h4>Equipo B</h4><div id="B"></div></div>
-<button class="ok" id="ganaA">Gana Equipo A</button>
-<button class="bad" id="ganaB">Gana Equipo B</button>
-<button class="primary" id="siguiente">➡️ Siguiente Partido</button>
-</section>
-</main>
+
+<h1>Liga de Baloncesto Automática</h1>
+
+<h2>Lista de jugadores (marcar invitados con "(invitado)")</h2>
+<textarea id="lista"></textarea>
+<br>
+<button onclick="cargarLista()">Cargar lista</button>
+<button onclick="siguientePartido()">➡️ Siguiente Partido</button>
+<button onclick="ganaA()">Gana Equipo A</button>
+<button onclick="ganaB()">Gana Equipo B</button>
+
+<h2>Partido #<span id="nPartido">0</span></h2>
+
+<div class="equipo">
+<h3>Equipo A</h3>
+<ul id="equipoA"></ul>
+</div>
+
+<div class="equipo">
+<h3>Equipo B</h3>
+<ul id="equipoB"></ul>
+</div>
 
 <script>
-let liga=[],invitados=[],colaLiga=[],colaInvitados=[],campeon=[],racha=0,standby=[],A=[],B=[],ultimoEnCancha=new Set(),modo='idle',nPartido=0;
+let colaLiga = [];
+let colaInvitados = [];
+let campeon = []; // equipo que ganó 2 consecutivos
+let ultimoEnCancha = new Set();
+let modo='normal'; // normal o standby
+let A=[], B=[];
+let nPartido=0;
+let consecutivosA=0;
+let consecutivosB=0;
 
-function $(x){return document.querySelector(x);}
-
-function render(){
- $("#liga").innerHTML=colaLiga.map(n=>`<span class='pill'>${n}</span>`).join('');
- $("#invitados").innerHTML=colaInvitados.map(n=>`<span class='pill'>${n}</span>`).join('');
- $("#A").innerHTML=A.map(n=>`<span class='pill'>${n}</span>`).join('');
- $("#B").innerHTML=B.map(n=>`<span class='pill'>${n}</span>`).join('');
- $("#estado").innerHTML=`<div class='chip'>Partido: ${nPartido}</div> 
- <div class='chip'>Racha: ${racha}</div> 
- <div class='chip'>Modo: ${modo}</div> 
- <div class='chip'>Campeón: ${campeon.join(', ')||'—'}</div> 
- <div class='chip'>Standby: ${standby.join(', ')||'—'}</div>`;
-}
-
-// Parsear lista de texto
-function parseLista(txt){
- const l=txt.split('\n').map(s=>s.replace(/^\d+\W*/,'').trim()).filter(Boolean);
- const L=[],I=[];
- for(const n of l){/\(invitado\)/i.test(n)?I.push(n.replace(/\(invitado\)/i,'').trim()):L.push(n);}
- return {L,I};
+function cargarLista(){
+  const lines = document.getElementById('lista').value.split('\n').map(l=>l.trim()).filter(l=>l);
+  colaLiga = [];
+  colaInvitados = [];
+  lines.forEach(j=>{
+    if(j.toLowerCase().includes('(invitado)')){
+      colaInvitados.push(j);
+    }else{
+      colaLiga.push(j);
+    }
+  });
+  alert("Lista cargada: "+lines.length+" jugadores");
 }
 
 // Tomar n jugadores de la cola sin repetir los que están en ex
 function tomar(cola,n,ex=new Set()){
- const seleccion=[];
- let i=0;
- while(seleccion.length<n && i<cola.length*2){
-   const jugador=cola.shift();
-   if(!ex.has(jugador)) seleccion.push(jugador);
-   cola.push(jugador);
-   i++;
- }
- return seleccion;
+  const seleccion=[];
+  let i=0;
+  while(seleccion.length<n){
+    if(cola.length===0) break;
+    const jugador=cola.shift();
+    if(!ex.has(jugador)){
+      seleccion.push(jugador);
+      ex.add(jugador);
+    }
+    cola.push(jugador); // vuelta a la cola para bucle infinito
+    i++;
+    if(i>cola.length*2) break; // seguridad
+  }
+  return seleccion;
 }
 
-// Primer partido: 10 jugadores de liga
-function partida1(){
- const seleccion=tomar(colaLiga,10);
- const shuffled=seleccion.sort(()=>Math.random()-0.5);
- A=shuffled.slice(0,5);
- B=shuffled.slice(5);
- modo='normal'; nPartido=1;
- ultimoEnCancha=new Set([...A,...B]);
+// Generar equipos del partido según reglas
+function generarEquipos(){
+  let ex=new Set([...ultimoEnCancha, ...campeon]);
+  if(nPartido===1){
+    // primer partido: 10 de la liga
+    const primeros = tomar(colaLiga,10,ex);
+    A=primeros.slice(0,5);
+    B=primeros.slice(5,10);
+  } else if(modo==='standby'){
+    // equipo ganador en standby ya está en campeon
+    const nuevos = retador();
+    if(consecutivosA>=2){
+      B = nuevos;
+      A = campeon;
+    } else if(consecutivosB>=2){
+      A = nuevos;
+      B = campeon;
+    } else {
+      A = nuevos.slice(0,5);
+      B = nuevos.slice(5,10);
+    }
+  } else {
+    // partidos normales: 3 liga + 2 invitados cada equipo
+    const nuevos = retador();
+    A = nuevos.slice(0,5);
+    B = nuevos.slice(5,10);
+  }
+  ultimoEnCancha = new Set([...A,...B]);
+  mostrarEquipos();
 }
 
-// Retador normal: 3 liga + 2 invitados
 function retador(){
- let ex=new Set([...ultimoEnCancha, ...campeon]);
- let L=tomar(colaLiga,3,ex);
- let I=tomar(colaInvitados,2,ex);
- if(I.length<2)L=L.concat(tomar(colaLiga,2-I.length,ex));
- return L.concat(I);
+  let ex=new Set([...ultimoEnCancha, ...campeon]);
+  let equipo = [];
+  // intentamos sacar 3 liga y 2 invitados para cada equipo
+  const L = tomar(colaLiga,6,ex);
+  const I = tomar(colaInvitados,4,ex);
+  equipo = [...L,...I];
+  // si no alcanza 10, completamos con lo que haya
+  while(equipo.length<10){
+    equipo.push(...tomar([...colaLiga,...colaInvitados],10-equipo.length,ex));
+  }
+  return equipo;
 }
 
-// Partido cuando el campeón juega contra retador normal
-function partidoNormal(){
- A=campeon.slice();
- B=retador();
- modo='normal'; nPartido++; 
- ultimoEnCancha=new Set([...A,...B]);
+function mostrarEquipos(){
+  document.getElementById('equipoA').innerHTML = A.map(j=>"<li>"+j+"</li>").join('');
+  document.getElementById('equipoB').innerHTML = B.map(j=>"<li>"+j+"</li>").join('');
+  document.getElementById('nPartido').textContent = nPartido;
 }
 
-// Partido con 10 nuevos cuando el equipo ganador se sienta (standby)
-function partido10nuevos(){
- let ex=new Set([...ultimoEnCancha, ...campeon]);
- let nuevosA=tomar(colaLiga,3,ex).concat(tomar(colaInvitados,2,ex));
- let nuevosB=tomar(colaLiga,3,ex).concat(tomar(colaInvitados,2,ex));
- A=nuevosA;
- B=nuevosB;
- modo='standby';
- nPartido++;
- ultimoEnCancha=new Set([...A,...B]);
+function siguientePartido(){
+  nPartido++;
+  generarEquipos();
 }
 
-// Siguiente partido
-function siguiente(){
- if(nPartido===0){ partida1(); render(); return; }
-
- // Si hay equipo en standby y no estamos en modo standby: enfrentamiento campeón vs ganador de 10 nuevos
- if(standby.length && modo!=='standby'){
-   A=standby.slice();
-   B=retador();
-   standby=[];
-   modo='normal';
-   nPartido++;
-   ultimoEnCancha=new Set([...A,...B]);
-   render(); 
-   return;
- }
-
- // Si hay campeón y ganó 2 veces consecutivas: sentar y entrar 10 nuevos
- if(campeon.length===5 && racha>=2){
-   standby=campeon.slice();
-   campeon=[];
-   racha=0;
-   partido10nuevos();
-   render();
-   return;
- }
-
- if(modo==='standby'){ // ganador de 10 nuevos enfrentando al standby
-   partidoNormal();
-   render();
-   return;
- }
-
- // Partido normal entre campeón y retador
- if(campeon.length===5){
-   partidoNormal();
-   render();
-   return;
- }
-
- render();
+// marcar ganador
+function ganaA(){
+  if(A.toString()===campeon.toString()){
+    consecutivosA++;
+  } else {
+    consecutivosA=1;
+  }
+  consecutivosB=0;
+  actualizarColas('A');
 }
 
-// Marcar ganador
-function gana(quien){
- if(modo==='idle') return;
- let AA=A.slice(), BB=B.slice();
-
- if(modo==='standby'){
-   // Ganador del partido 10 nuevos
-   const win=(quien==='A'?AA:BB);
-   const lose=(quien==='A'?BB:AA);
-   campeon=win.slice();
-   racha=1;
-   modo='normal';
-   // Los perdedores van al final de sus colas
-   for(const j of lose){
-     if(invitados.includes(j)) colaInvitados.push(j);
-     else colaLiga.push(j);
-   }
- } else {
-   // Partido normal
-   if(campeon.length===0){ // primer partido normal
-     campeon=(quien==='A'?AA:BB);
-     racha=1;
-     const lose=(quien==='A'?BB:AA);
-     for(const j of lose){
-       if(invitados.includes(j)) colaInvitados.push(j);
-       else colaLiga.push(j);
-     }
-   } else {
-     const win=(quien==='A'?AA:BB);
-     const lose=(quien==='A'?BB:AA);
-     if(win.join()===campeon.join()){
-       racha++;
-     } else {
-       campeon=win.slice();
-       racha=1;
-     }
-     for(const j of lose){
-       if(invitados.includes(j)) colaInvitados.push(j);
-       else colaLiga.push(j);
-     }
-   }
- }
- modo='idle';
- render();
+function ganaB(){
+  if(B.toString()===campeon.toString()){
+    consecutivosB++;
+  } else {
+    consecutivosB=1;
+  }
+  consecutivosA=0;
+  actualizarColas('B');
 }
 
-// Cargar lista
-$("#load").onclick=()=>{
- const {L,I}=parseLista($("#seed").value);
- liga=L; invitados=I;
- colaLiga=[...L]; colaInvitados=[...I];
- campeon=[]; racha=0; standby=[]; A=[]; B=[]; ultimoEnCancha=new Set(); nPartido=0; modo='idle';
- render();
+function actualizarColas(ganador){
+  let perdedor = ganador==='A'?B:A;
+  // los perdedores van al final de su cola según sean liga o invitados
+  perdedor.forEach(p=>{
+    if(colaLiga.includes(p) || colaInvitados.includes(p)){
+      // ya está en cola, no mover
+    } else if(p.toLowerCase().includes('(invitado)')){
+      colaInvitados.push(p);
+    } else {
+      colaLiga.push(p);
+    }
+  });
+
+  // actualizar campeón si ganó 2 consecutivos
+  if(consecutivosA>=2){
+    campeon = A;
+    modo='standby';
+  } else if(consecutivosB>=2){
+    campeon = B;
+    modo='standby';
+  } else {
+    campeon=[];
+    modo='normal';
+  }
 }
-
-$("#siguiente").onclick=()=>{siguiente();}
-$("#ganaA").onclick=()=>{gana('A');}
-$("#ganaB").onclick=()=>{gana('B');}
-
-render();
 </script>
+
 </body>
 </html>
+  
