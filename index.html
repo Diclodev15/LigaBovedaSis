@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Liga de Baloncesto Automática</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Liga de Baloncesto Persistente</title>
 <style>
 body{margin:0;font-family:system-ui;background:#0e1320;color:#fff;}
 header{background:#141a33;padding:10px 20px;position:sticky;top:0;z-index:5}
@@ -21,7 +21,7 @@ textarea{width:100%;height:130px;background:#0f152b;color:#fff;border:1px solid 
 </style>
 </head>
 <body>
-<header><h2>🏀 Sistema Automático de Liga</h2></header>
+<header><h2>🏀 Liga de Baloncesto Persistente</h2></header>
 <main>
 <section class="card">
 <h3>Cargar jugadores</h3>
@@ -46,11 +46,13 @@ textarea{width:100%;height:130px;background:#0f152b;color:#fff;border:1px solid 
 </main>
 
 <script>
-let liga=[],invitados=[],campeon=[],racha=0,standby=[],A=[],B=[],ultimoEnCancha=new Set(),modo='idle',nPartido=0;
+let liga=[],invitados=[],colaLiga=[],colaInvitados=[],campeon=[],racha=0,standby=[],A=[],B=[],ultimoEnCancha=new Set(),modo='idle',nPartido=0;
+
 function $(x){return document.querySelector(x);}
+
 function render(){
- $("#liga").innerHTML=liga.map(n=>`<span class='pill'>${n}</span>`).join('');
- $("#invitados").innerHTML=invitados.map(n=>`<span class='pill'>${n}</span>`).join('');
+ $("#liga").innerHTML=colaLiga.map(n=>`<span class='pill'>${n}</span>`).join('');
+ $("#invitados").innerHTML=colaInvitados.map(n=>`<span class='pill'>${n}</span>`).join('');
  $("#A").innerHTML=A.map(n=>`<span class='pill'>${n}</span>`).join('');
  $("#B").innerHTML=B.map(n=>`<span class='pill'>${n}</span>`).join('');
  $("#estado").innerHTML=`<div class='chip'>Partido: ${nPartido}</div> 
@@ -59,60 +61,168 @@ function render(){
  <div class='chip'>Campeón: ${campeon.join(', ')||'—'}</div> 
  <div class='chip'>Standby: ${standby.join(', ')||'—'}</div>`;
 }
+
+// Parsear lista de texto
 function parseLista(txt){
  const l=txt.split('\n').map(s=>s.replace(/^\d+\W*/,'').trim()).filter(Boolean);
  const L=[],I=[];
  for(const n of l){/\(invitado\)/i.test(n)?I.push(n.replace(/\(invitado\)/i,'').trim()):L.push(n);}
  return {L,I};
 }
-function tomar(q,n,ex=new Set()){const o=[];let c=0;while(o.length<n&&q.length&&c<q.length*3){const v=q.shift();if(!ex.has(v))o.push(v);q.push(v);c++;}return o;}
+
+// Tomar n jugadores de la cola sin repetir los que están en ex
+function tomar(cola,n,ex=new Set()){
+ const seleccion=[];
+ let i=0;
+ while(seleccion.length<n && i<cola.length*2){
+   const jugador=cola.shift();
+   if(!ex.has(jugador)) seleccion.push(jugador);
+   cola.push(jugador);
+   i++;
+ }
+ return seleccion;
+}
+
+// Primer partido: 10 jugadores de liga
 function partida1(){
- const p=liga.splice(0,10);
- const mezclado=p.sort(()=>Math.random()-0.5);
- A=mezclado.slice(0,5);B=mezclado.slice(5);
- modo='normal';nPartido=1;
+ const seleccion=tomar(colaLiga,10);
+ const shuffled=seleccion.sort(()=>Math.random()-0.5);
+ A=shuffled.slice(0,5);
+ B=shuffled.slice(5);
+ modo='normal'; nPartido=1;
  ultimoEnCancha=new Set([...A,...B]);
 }
-function retador(){let L=tomar(liga,3),G=tomar(invitados,2);if(G.length<2)G=G.concat(tomar(liga,2-G.length));return L.concat(G);}
+
+// Retador normal: 3 liga + 2 invitados
+function retador(){
+ let ex=new Set([...ultimoEnCancha, ...campeon]);
+ let L=tomar(colaLiga,3,ex);
+ let I=tomar(colaInvitados,2,ex);
+ if(I.length<2)L=L.concat(tomar(colaLiga,2-I.length,ex));
+ return L.concat(I);
+}
+
+// Partido cuando el campeón juega contra retador normal
 function partidoNormal(){
- A=campeon.slice();B=retador();modo='normal';nPartido++;ultimoEnCancha=new Set([...A,...B]);
+ A=campeon.slice();
+ B=retador();
+ modo='normal'; nPartido++; 
+ ultimoEnCancha=new Set([...A,...B]);
 }
+
+// Partido con 10 nuevos cuando el equipo ganador se sienta (standby)
 function partido10nuevos(){
- const ex=new Set(ultimoEnCancha);
- let aL=tomar(liga,3,ex),aG=tomar(invitados,2,ex);
- if(aG.length<2)aL=aL.concat(tomar(liga,2-aG.length,ex));
- let bL=tomar(liga,3,ex),bG=tomar(invitados,2,ex);
- if(bG.length<2)bL=bL.concat(tomar(liga,2-bG.length,ex));
- A=aL.concat(aG);B=bL.concat(bG);modo='standby';nPartido++;ultimoEnCancha=new Set([...A,...B]);
+ let ex=new Set([...ultimoEnCancha, ...campeon]);
+ let nuevosA=tomar(colaLiga,3,ex).concat(tomar(colaInvitados,2,ex));
+ let nuevosB=tomar(colaLiga,3,ex).concat(tomar(colaInvitados,2,ex));
+ A=nuevosA;
+ B=nuevosB;
+ modo='standby';
+ nPartido++;
+ ultimoEnCancha=new Set([...A,...B]);
 }
+
+// Siguiente partido
 function siguiente(){
- if(nPartido===0)return partida1();
- if(standby.length&&modo!=='standby'&&campeon.length){A=campeon.slice();B=standby.slice();standby=[];modo='normal';nPartido++;return render();}
- if(campeon.length===5&&racha>=2){standby=campeon.slice();campeon=[];racha=0;partido10nuevos();return;}
- if(modo==='standby'){partidoNormal();return;}
- if(campeon.length===5){partidoNormal();return;}
+ if(nPartido===0){ partida1(); render(); return; }
+
+ // Si hay equipo en standby y no estamos en modo standby: enfrentamiento campeón vs ganador de 10 nuevos
+ if(standby.length && modo!=='standby'){
+   A=standby.slice();
+   B=retador();
+   standby=[];
+   modo='normal';
+   nPartido++;
+   ultimoEnCancha=new Set([...A,...B]);
+   render(); 
+   return;
+ }
+
+ // Si hay campeón y ganó 2 veces consecutivas: sentar y entrar 10 nuevos
+ if(campeon.length===5 && racha>=2){
+   standby=campeon.slice();
+   campeon=[];
+   racha=0;
+   partido10nuevos();
+   render();
+   return;
+ }
+
+ if(modo==='standby'){ // ganador de 10 nuevos enfrentando al standby
+   partidoNormal();
+   render();
+   return;
+ }
+
+ // Partido normal entre campeón y retador
+ if(campeon.length===5){
+   partidoNormal();
+   render();
+   return;
+ }
+
+ render();
 }
+
+// Marcar ganador
 function gana(quien){
- if(modo==='idle')return;
- const AA=A.slice(),BB=B.slice();
+ if(modo==='idle') return;
+ let AA=A.slice(), BB=B.slice();
+
  if(modo==='standby'){
-   const win=(quien==='A'?AA:BB),lose=(quien==='A'?BB:AA);
-   campeon=win.slice();racha=1;modo='normal';
-   for(const n of lose){if(invitados.includes(n))invitados.push(invitados.splice(invitados.indexOf(n),1)[0]);else liga.push(liga.splice(liga.indexOf(n),1)[0]);}
- }else{
-   if(!campeon.length){campeon=(quien==='A'?AA:BB);racha=1;}
-   else{
-     const ganaCampeon=(quien==='A');
-     if(ganaCampeon){racha++;if(racha>=2){standby=campeon.slice();campeon=[];racha=0;partido10nuevos();render();return;}}
-     else{racha=1;campeon=(quien==='A'?AA:BB);}
+   // Ganador del partido 10 nuevos
+   const win=(quien==='A'?AA:BB);
+   const lose=(quien==='A'?BB:AA);
+   campeon=win.slice();
+   racha=1;
+   modo='normal';
+   // Los perdedores van al final de sus colas
+   for(const j of lose){
+     if(invitados.includes(j)) colaInvitados.push(j);
+     else colaLiga.push(j);
+   }
+ } else {
+   // Partido normal
+   if(campeon.length===0){ // primer partido normal
+     campeon=(quien==='A'?AA:BB);
+     racha=1;
+     const lose=(quien==='A'?BB:AA);
+     for(const j of lose){
+       if(invitados.includes(j)) colaInvitados.push(j);
+       else colaLiga.push(j);
+     }
+   } else {
+     const win=(quien==='A'?AA:BB);
+     const lose=(quien==='A'?BB:AA);
+     if(win.join()===campeon.join()){
+       racha++;
+     } else {
+       campeon=win.slice();
+       racha=1;
+     }
+     for(const j of lose){
+       if(invitados.includes(j)) colaInvitados.push(j);
+       else colaLiga.push(j);
+     }
    }
  }
- modo='idle';render();
+ modo='idle';
+ render();
 }
-$("#load").onclick=()=>{const {L,I}=parseLista($("#seed").value);liga=L;invitados=I;campeon=[];racha=0;standby=[];modo='idle';nPartido=0;render();}
-$("#siguiente").onclick=()=>{siguiente();render();}
+
+// Cargar lista
+$("#load").onclick=()=>{
+ const {L,I}=parseLista($("#seed").value);
+ liga=L; invitados=I;
+ colaLiga=[...L]; colaInvitados=[...I];
+ campeon=[]; racha=0; standby=[]; A=[]; B=[]; ultimoEnCancha=new Set(); nPartido=0; modo='idle';
+ render();
+}
+
+$("#siguiente").onclick=()=>{siguiente();}
 $("#ganaA").onclick=()=>{gana('A');}
 $("#ganaB").onclick=()=>{gana('B');}
+
 render();
 </script>
 </body>
